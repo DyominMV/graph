@@ -1,6 +1,9 @@
 module Graph where
 
+import Data.Foldable (minimumBy)
 import Data.Function ((&))
+import Data.List (groupBy)
+import Data.Maybe (catMaybes)
 import Data.Set (Set, union)
 import qualified Data.Set as Set
 import Matrix (Matrix (rows), buildMatrix, cols)
@@ -17,55 +20,77 @@ instance (Show v) => Show (Vertex v) where
 
 -- Edge
 
-data Edge e v = Edge {edgeData :: e, target :: Vertex v}
+data Edge e v = Edge
+  { edgeData :: e,
+    edgeTarget :: Vertex v
+  }
   deriving (Eq, Ord)
 
 instance (Show e, Show v) => Show (Edge e v) where
   show edge =
     "-[" ++ show (edgeData edge) ++ "]->"
-      ++ show (edge & target)
+      ++ show (edge & edgeTarget)
 
 -- FullEdge
 
-data FullEdge e v = FullEdge (Vertex v) (Edge e v)
+data FullEdge e v = FullEdge
+  { fullEdgeSource :: Vertex v,
+    fullEdgeData :: e,
+    fullEdgeTarget :: Vertex v
+  }
   deriving (Eq, Ord)
 
 instance (Show e, Show v) => Show (FullEdge e v) where
-  show (FullEdge v edge) = show v ++ show edge
-
-fullEdgeSource :: FullEdge e v -> Vertex v
-fullEdgeSource (FullEdge v _) = v
-
-fullEdgeTarget :: FullEdge e v -> Vertex v
-fullEdgeTarget (FullEdge _ (Edge _ v)) = v
-
-fullEdgeData :: FullEdge e v -> e
-fullEdgeData (FullEdge _ (Edge e _)) = e
+  show (FullEdge v1 e v2) = show v1 ++ show (Edge e v2)
 
 -- Route
 
-newtype Route e v = Route [Edge e v]
+data Route e v
+  = Route
+      { routeSource :: Vertex v,
+        routeEdges :: [Edge e v]
+      }
+  | EmptyRoute
   deriving (Eq, Ord)
 
 instance (Show e, Show v) => Show (Route e v) where
-  show (Route []) = " |-EMPTY_ROUTE-| "
-  show (Route edges) = concatMap show edges
+  show EmptyRoute = " |-No moving-| "
+  show (Route src []) = " |-Standing at " ++ show src ++ "-| "
+  show (Route src edges) = show src ++ concatMap show edges
 
-append :: Route e v -> Route e v -> Route e v
-append (Route es1) (Route es2) = Route $ es1 ++ es2
+routeTarget :: Route e v -> Vertex v
+routeTarget (Route _ edges) = edges & last & edgeTarget
 
-simplify :: (Eq e, Eq v) => Route e v -> Route e v
-simplify (Route []) = Route []
-simplify (Route edges) =
-  (tail edges `zip` map target edges)
-    & removeCycles
-    & map fst
-    & (head edges :)
-    & Route
+append :: Eq v => Route e v -> Route e v -> Maybe (Route e v)
+append EmptyRoute r2 = Just r2
+append r1 EmptyRoute = Just r1
+append r1@(Route src1 edges1) r2@(Route src2 edges2) =
+  if routeTarget r1 == routeSource r2
+    then Just (Route src1 (edges1 ++ edges2))
+    else Nothing
+
+toFullEdges :: Route e v -> [FullEdge e v]
+toFullEdges EmptyRoute = []
+toFullEdges (Route src edges) =
+  zipWith3
+    FullEdge
+    (src : map edgeTarget edges)
+    (map edgeData edges)
+    (map edgeTarget edges)
+
+fullEdgeSet :: (Ord v, Ord e) => Route e v -> Set (FullEdge e v)
+fullEdgeSet = Set.fromList . toFullEdges
+
+toRoute :: [FullEdge e v] -> Route e v
+toRoute [] = EmptyRoute
+toRoute fullEdges =
+  Route
+    (head fullEdges & fullEdgeSource)
+    (fullEdges & map (\(FullEdge _ e v2) -> Edge e v2))
 
 -- RouteSet
 
-newtype RouteSet e v = RouteSet (Set (Route e v))
+newtype RouteSet e v = RouteSet {getRoutes :: Set (Route e v)}
   deriving (Eq)
 
 fromRoutes :: (Ord e, Ord v) => [Route e v] -> RouteSet e v
@@ -76,14 +101,26 @@ instance (Show e, Show v) => Show (RouteSet e v) where
 
 instance (Ord e, Ord v) => Semiring (RouteSet e v) where
   zero = RouteSet Set.empty
-  one = RouteSet $ Set.singleton $ Route []
-  plus (RouteSet rs1) (RouteSet rs2) = RouteSet $ rs1 `union` rs2
+  one = RouteSet $ Set.singleton EmptyRoute
+  plus (RouteSet rs1) (RouteSet rs2) =
+    RouteSet $
+      (rs1 `union` rs2)
+        & Set.toList
+        & groupOn fullEdgeSet
+        & map (minimumOn (length . toFullEdges))
+        & Set.fromList
+    where
+      groupOn :: (Eq b) => (a -> b) -> [a] -> [[a]]
+      groupOn _ [] = []
+      groupOn f (x : xs) = (x : filter ((== f x) . f) xs) : groupOn f (filter ((/= f x) . f) xs)
+      minimumOn :: (Ord b) => (a -> b) -> [a] -> a
+      minimumOn f = minimumBy (\a b -> f a `compare` f b)
   prod (RouteSet rs1) (RouteSet rs2) =
     RouteSet $
       buildMatrix append (Set.toList rs1) (Set.toList rs2)
         & rows
         & concat
-        & map simplify
+        & catMaybes
         & Set.fromList
 
 -- Graph
@@ -103,7 +140,7 @@ edges g =
 fullEdges :: (Ord e, Ord v) => Graph e v -> [FullEdge e v]
 fullEdges g =
   vertices g
-    & concatMap (\v -> map (FullEdge v) $ edgeFunc g v)
+    & concatMap (\v -> map (\(Edge e v2) -> FullEdge v e v2) $ edgeFunc g v)
     & Set.fromList
     & Set.toList
 
@@ -122,27 +159,3 @@ buildGraph lst = Digraph foundVertices edgeExtracter
         & filter ((== v) . fst)
         & concatMap snd
         & map (\(e, v) -> Edge e $ Vertex v)
-
--- Path
-
-data Path e v = Path {source :: Vertex v, route :: Route e v}
-  deriving (Eq, Ord)
-
-instance (Show e, Show v) => Show (Path e v) where
-  show (Path v (Route [])) = show v
-  show path = (source path & show) ++ (route path & show)
-
-toPath :: Vertex v -> Route e v -> Path e v
-toPath = Path
-
-toPaths :: Vertex v -> RouteSet e v -> [Path e v]
-toPaths v (RouteSet set) =
-  Set.toList set
-    & map (Path v)
-
-toFullEdges :: Path e v -> [FullEdge e v]
-toFullEdges (Path src (Route edges)) =
-  zipWith
-    FullEdge
-    (src : map target edges)
-    edges

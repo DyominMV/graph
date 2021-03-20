@@ -1,7 +1,7 @@
 module EXAMPLE where
 
 import Graph (Graph, Vertex (Vertex), buildGraph)
-import TestGraph (bestPaths)
+import TestGraph (bestRoutes)
 
 newtype Ed = Ed Int
   deriving (Ord, Eq)
@@ -17,7 +17,7 @@ testGraph =
   buildGraph
     [ (1, [(Ed 1, 2)]),
       (2, [(Ed 1, 3), (Ed 1, 6)]),
-      (3, [(Ed 1, 5), (Ed 1, 4)]),
+      (3, [(Ed 1, 5), (Ed 1, 4), (Ed 1, 3)]),
       (4, [(Ed 1, 2)])
     ]
 
@@ -26,5 +26,5 @@ showLst = concatMap (\a -> '\n' : show a)
 
 main :: IO ()
 main = do
-  putStrLn $ concatMap (('\n' :) . showLst) (bestPaths [Vertex 1] testGraph)
+  putStrLn $ concatMap (('\n' :) . showLst) (bestRoutes [Vertex 1] testGraph)
   putStrLn ""
