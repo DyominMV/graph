@@ -55,7 +55,13 @@ append :: Route e v -> Route e v -> Route e v
 append (Route es1) (Route es2) = Route $ es1 ++ es2
 
 simplify :: (Eq e, Eq v) => Route e v -> Route e v
-simplify (Route edges) = Route $ removeCycles edges
+simplify (Route []) = Route []
+simplify (Route edges) =
+  (tail edges `zip` map target edges)
+    & removeCycles
+    & map fst
+    & (head edges :)
+    & Route
 
 -- RouteSet
 
@@ -136,6 +142,7 @@ toPaths v (RouteSet set) =
 
 toFullEdges :: Path e v -> [FullEdge e v]
 toFullEdges (Path src (Route edges)) =
-  zipWith FullEdge
+  zipWith
+    FullEdge
     (src : map target edges)
     edges

@@ -15,7 +15,7 @@ instance Show Ed where
 testGraph :: Graph Ed Integer
 testGraph =
   buildGraph
-    [ (1, [(Ed 1, 2), (Ed 1, 1)]),
+    [ (1, [(Ed 1, 2)]),
       (2, [(Ed 1, 3), (Ed 1, 6)]),
       (3, [(Ed 1, 5), (Ed 1, 4)]),
       (4, [(Ed 1, 2)])

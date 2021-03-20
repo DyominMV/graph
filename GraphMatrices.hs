@@ -46,10 +46,10 @@ allRoutesMatrix graph =
     & iterate (\a -> a `prod` a)
     & firstRepeatedElement
   where
-    firstRepeatedElement (x1 : x2 : xs) =
-      if x1 == x2
+    firstRepeatedElement (x1 : x2 : x3 : xs) =
+      if x1 == x2 || x1 == x3
         then x1
-        else firstRepeatedElement (x2 : xs)
+        else firstRepeatedElement (x2 : x3 : xs)
 
 allPathsMatrix :: (Eq v, Eq e, Ord e, Ord v) => Graph e v -> Matrix [Path e v]
 allPathsMatrix graph =
