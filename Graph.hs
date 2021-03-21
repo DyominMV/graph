@@ -7,7 +7,6 @@ import Data.Maybe (catMaybes)
 import Data.Set (Set, union)
 import qualified Data.Set as Set
 import Matrix (Matrix (rows), buildMatrix, cols)
-import RemoveCycles (removeCycles)
 import Semiring (Semiring (..))
 
 -- Vertex
